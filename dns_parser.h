@@ -2,20 +2,37 @@
 #define DNS_PARSER_H
 
 #include <stdio.h>
-#include <net/ethernet.h>
-#include <net/if.h>
-#include <linux/if_packet.h>
+#include <stdlib.h>
+#include <sys/socket.h>
 #include <netinet/ip.h>
 #include <netinet/udp.h>
 #include <arpa/inet.h>
+#include <string.h>
+#include <unistd.h>
+#include <net/ethernet.h>
+#include <net/if.h>
+#include <linux/if_packet.h>
+#include "dns_parser.h"
+#include <pthread.h>
 
 #define BUF_SIZE 65536
-#define RECORD_NUM 10
+#define RECORD_NUM 32
 #define NET_INTERFACE "ens33"
 #define DNS_RECORD_TYPE_A 1
 #define DNS_RECORD_TYPE_CNAME 5
 #define CMD_SIZE 50
 #define OPTION_SIZE 10
+#define IP_LEN 20
+#define WLIST_LEN 20
+#define url "google.com"
+
+// char whie_list[WLIST_LEN][IP_LEN];
+
+struct white_list_t
+{
+    int len;
+    char ip_list[WLIST_LEN][IP_LEN];
+};
 
 struct eth_hdr_t
 {
@@ -118,9 +135,17 @@ struct dns_query_t
     struct question_t *quest;
 };  // dns_query
 
+// Check is IP exist in white list; return 1 - exist, 0 not exist
+int is_exist(struct white_list_t *wlist ,char *ip);
+
+void change_to_dns_name_format(char *dns, char *host);
+
+// Function for multithreading dns parser
+void *dns_parser();
+
 void print_buffer(unsigned char buffer[], int len);
 
 // Find domain name length in query section
 int find_qname_len(unsigned char buffer[]);
 
-#endif
+#endif  /* DNS_PARSER_H*/

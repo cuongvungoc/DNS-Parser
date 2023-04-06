@@ -3,6 +3,7 @@
         "ethernet.h": "c",
         "udp.h": "c",
         "ip.h": "c",
-        "stdio.h": "c"
+        "stdio.h": "c",
+        "pthread.h": "c"
     }
 }
