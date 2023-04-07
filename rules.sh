@@ -18,13 +18,13 @@ then
     define_chain
 
     # Define white-list-chain
-    iptables -I white-list 1 -d 172.217.164.10 -j ACCEPT
+    # iptables -I white-list 1 -d 172.217.164.10 -j ACCEPT
     # iptables -I white-list 1 -d 111.65.250.2 -j ACCEPT
 
     iptables -A white-list -p udp --dport 53 -j ACCEPT
     iptables -A white-list -p udp --sport 53 -j ACCEPT
     
-    # Define chain to lock
+    # Lock machine from Internet access
     iptables -A chain-lock -j DROP
 
 elif [ $1 = "unlock" ];

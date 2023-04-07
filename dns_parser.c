@@ -13,7 +13,6 @@ int is_exist(struct white_list_t *wlist, char *ip)
             break;
         }
     }
-
     return 0;
 }
 
@@ -40,22 +39,6 @@ void change_to_dns_name_format(char *dns, char *host)
     }
     temp2[pos] = '\0';
     strcpy(dns, temp2);
-}
-
-void set_state_arlarm(int state_val)
-{
-    pthread_mutex_lock(&mutex);
-    state_arlarm = state_val;
-    pthread_mutex_unlock(&mutex);
-}
-
-int get_state_arlarm()
-{
-    int value;
-    pthread_mutex_lock(&mutex);
-    value = state_arlarm;
-    pthread_mutex_unlock(&mutex);
-    return value;
 }
 
 // Function for multithreading dns parser
@@ -96,12 +79,7 @@ void *dns_parser()
 
     while (1)
     {
-        if (1 == get_state_arlarm())
-        {
-            wlist->len = 0;
-            set_state_arlarm(0);
-        }
-        // printf("\n====================== INCOMING MESSAGE ======================\n");
+        // Set buffer for reading dns response message
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
         if (len < 0)
@@ -109,31 +87,27 @@ void *dns_parser()
             perror("recv");
             exit(1);
         }
-
-        struct eth_hdr_t *eth_hdr = (struct eth_hdr_t *)&buffer;
-        // printf("Ethernet protocol: %d\n", ntohs(eth_hdr->h_proto));
-
-        struct ip_hdr_t *ip_hdr = (struct ip_hdr_t *)&buffer[sizeof(struct eth_hdr_t)];
-        // printf("IP protocol: %d\n", ip_hdr->ip_proto);
+ 
+        ip_header *ip_hdr = (ip_header *)&buffer[sizeof(eth_header)];
 
         // Check IP Protocol : 17 - UDP
         if (ip_hdr->ip_proto == 17)
         {
-            struct udp_hdr_t *udp_hdr = (struct udp_hdr_t *)&buffer[sizeof(struct ip_hdr_t) + sizeof(struct eth_hdr_t)];
-            // printf("UDP src port: %d\n", ntohs(udp_hdr->src_port));
+            // Read UDP header
+            udp_header *udp_hdr = (udp_header *)&buffer[sizeof(ip_header) + sizeof(eth_header)];
+
             // Check UDP source port: 53 - DNS
             if (ntohs(udp_hdr->src_port) == 53)
             {
-                // print_buffer(buffer, len);
-                struct dns_hdr_t *dns_hdr = (struct dns_hdr_t *)&buffer[sizeof(struct ip_hdr_t) + sizeof(struct eth_hdr_t) + sizeof(struct udp_hdr_t)];
-                // printf("Number of Question: %d\n", ntohs(dns_hdr->qdcount));
-                // printf("Number of Answer: %d\n", ntohs(dns_hdr->ancount));
-                // printf("Number of Authority: %d\n", ntohs(dns_hdr->nscount));
-                // printf("Number of Additional: %d\n", ntohs(dns_hdr->arcount));
-                unsigned char *qname = (unsigned char *)&buffer[sizeof(struct ip_hdr_t) + sizeof(struct eth_hdr_t) + sizeof(struct udp_hdr_t) + sizeof(struct dns_hdr_t)];
+                // Read DNS header
+                dns_header *dns_hdr = (dns_header *)&buffer[sizeof(ip_header) + sizeof(eth_header) + sizeof(udp_header)];
 
+                // Read name (URL)
+                unsigned char *qname = (unsigned char *)&buffer[sizeof(ip_header) + sizeof(eth_header) + sizeof(udp_header) + sizeof(dns_header)];
+
+                // Find name length
                 int qname_len = find_qname_len(qname);
-                // printf("Domain name length: %d\n", qname_len);
+
                 unsigned char *name = (unsigned char *)malloc(qname_len * sizeof(unsigned char));
                 memcpy(name, qname, qname_len);
 
@@ -149,21 +123,15 @@ void *dns_parser()
                         name_cmp[i] += 48;
                     }
                 }
-                // name_cmp[qname_len - 3] = '\n';
-                change_to_dns_name_format(url_cmp, url);
+
+                change_to_dns_name_format(url_cmp, URL);
                 /* Check name */
-                // for (int i = 0; i < qname_len; i++)
-                // {
-                //     printf("%d - %d |", name_cmp[i], url_cmp[i]);
-                // }
-                // printf("Compare: %d\n", memcmp(name_cmp, url_cmp, qname_len));
+
+                // If name equal to url -> get IP from dns answer
                 if (0 == memcmp(name_cmp, url_cmp, qname_len))
                 {
-                    struct dns_question_t *dns_quest = (struct dns_question_t *)&qname[qname_len];
-                    // printf("Type: %d, Class: %d\n", ntohs(dns_quest->qclass), ntohs(dns_quest->qtype));
-
-                    unsigned char *payload = (unsigned char *)&qname[qname_len + sizeof(struct dns_question_t)];
-                    // print_buffer(payload, 20);
+                    dns_question *dns_quest = (dns_question *)&qname[qname_len];
+                    unsigned char *payload = (unsigned char *)&qname[qname_len + sizeof(dns_question)];
 
                     // Read Answer
                     int payload_ptr = 0;
@@ -181,25 +149,23 @@ void *dns_parser()
                             for (int j = 0; j < ntohs(answer[i].resource->length); j++)
                             {
                                 answer[i].rdata[j] = payload[payload_ptr + j];
-                                // printf("%.2x ", answer[i].rdata[j]);
                             }
-                            // printf("\n");
 
                             // Convert IP to dotted decimal string
                             long *p;
                             struct sockaddr_in a;
                             p = (long *)answer[i].rdata;
                             a.sin_addr.s_addr = (*p);
-                            // printf("IP: %s\n", inet_ntoa(a.sin_addr));
+
                             if (0 == is_exist(wlist, inet_ntoa(a.sin_addr))) // not exist
                             {
+                                // Add IP to white-list
                                 strcpy(wlist->ip_list[wlist->len], inet_ntoa(a.sin_addr));
-                                // printf("W IP: %s\n", wlist->ip_list[wlist->len]);
                                 wlist->len += 1;
-                                // printf("W len: %d\n", wlist->len);
+
+                                // Add to chain and execute rule
                                 strcat(cmd, inet_ntoa(a.sin_addr));
                                 strcat(cmd, " -j ACCEPT");
-                                // printf("CMD: %s\n", cmd);
                                 system(cmd);
                                 strcpy(cmd, "iptables -I white-list 1 -d ");
                             }
@@ -211,21 +177,11 @@ void *dns_parser()
     }
 }
 
-void print_buffer(unsigned char buffer[], int len)
-{
-    // printf("START PACKET\n");
-    for (int i = 0; i < len; i++)
-    {
-        printf("%.2x ", buffer[i]);
-    }
-    printf("\n");
-    // printf("\nEND PACKET\n.");
-}
-
 // Find domain name length in query section
 int find_qname_len(unsigned char buffer[])
 {
     int qlen = 0;
+    // 192 - c0 (dns pointer, point to prev name)
     while (buffer[qlen] < 192)
     {
         qlen++;
