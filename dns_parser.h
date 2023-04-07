@@ -12,7 +12,6 @@
 #include <net/ethernet.h>
 #include <net/if.h>
 #include <linux/if_packet.h>
-#include "dns_parser.h"
 #include <pthread.h>
 
 #define BUF_SIZE 65536
@@ -24,8 +23,10 @@
 #define OPTION_SIZE 10
 #define IP_LEN 20
 #define WLIST_LEN 20
-#define url "google.com"
+#define url "hust.edu.vn"
 
+extern int state_arlarm;
+extern pthread_mutex_t mutex; 
 // char whie_list[WLIST_LEN][IP_LEN];
 
 struct white_list_t
@@ -139,6 +140,10 @@ struct dns_query_t
 int is_exist(struct white_list_t *wlist ,char *ip);
 
 void change_to_dns_name_format(char *dns, char *host);
+
+void set_state_arlarm(int state_val);
+
+int get_state_arlarm();
 
 // Function for multithreading dns parser
 void *dns_parser();

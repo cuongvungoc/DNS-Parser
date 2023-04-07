@@ -42,6 +42,22 @@ void change_to_dns_name_format(char *dns, char *host)
     strcpy(dns, temp2);
 }
 
+void set_state_arlarm(int state_val)
+{
+    pthread_mutex_lock(&mutex);
+    state_arlarm = state_val;
+    pthread_mutex_unlock(&mutex);
+}
+
+int get_state_arlarm()
+{
+    int value;
+    pthread_mutex_lock(&mutex);
+    value = state_arlarm;
+    pthread_mutex_unlock(&mutex);
+    return value;
+}
+
 // Function for multithreading dns parser
 void *dns_parser()
 {
@@ -80,6 +96,11 @@ void *dns_parser()
 
     while (1)
     {
+        if (1 == get_state_arlarm())
+        {
+            wlist->len = 0;
+            set_state_arlarm(0);
+        }
         // printf("\n====================== INCOMING MESSAGE ======================\n");
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
@@ -123,7 +144,7 @@ void *dns_parser()
                 strcpy(name_cmp, (char *)name);
                 for (int i = 0; i < qname_len; i++)
                 {
-                    if (name_cmp[i] < 10 && name_cmp[i] != NULL)
+                    if (name_cmp[i] < 10 && name_cmp[i] != '\0')
                     {
                         name_cmp[i] += 48;
                     }
@@ -169,7 +190,7 @@ void *dns_parser()
                             struct sockaddr_in a;
                             p = (long *)answer[i].rdata;
                             a.sin_addr.s_addr = (*p);
-                            printf("IP: %s\n", inet_ntoa(a.sin_addr));
+                            // printf("IP: %s\n", inet_ntoa(a.sin_addr));
                             if (0 == is_exist(wlist, inet_ntoa(a.sin_addr))) // not exist
                             {
                                 strcpy(wlist->ip_list[wlist->len], inet_ntoa(a.sin_addr));
@@ -178,7 +199,7 @@ void *dns_parser()
                                 // printf("W len: %d\n", wlist->len);
                                 strcat(cmd, inet_ntoa(a.sin_addr));
                                 strcat(cmd, " -j ACCEPT");
-                                printf("CMD: %s\n", cmd);
+                                // printf("CMD: %s\n", cmd);
                                 system(cmd);
                                 strcpy(cmd, "iptables -I white-list 1 -d ");
                             }
