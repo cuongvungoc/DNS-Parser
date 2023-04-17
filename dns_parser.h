@@ -23,12 +23,18 @@
 #define OPTION_SIZE 10
 #define IP_LEN 20
 #define WLIST_LEN 20
+#define UDP_PROTO 17
+#define DNS_PORT 53
+#define ZERO_CHAR 48
+#define UNLOCK_STATE 0
+#define LOCK_STATE 1
 #define URL "hust.edu.vn"
 #define LOCK "lock"
 #define UNLOCK "unlock"
+#define NULL_SAVE " > /dev/null 2>&1"
 
-// extern int state_arlarm;
-// extern pthread_mutex_t mutex;
+extern int state_arlarm;
+extern pthread_mutex_t mutex;
 
 struct white_list_t
 {
@@ -136,6 +142,13 @@ struct dns_query_t
     unsigned char *name;
     struct question_t *quest;
 }; // dns_query
+
+// state_arlarm, 0 - unlock, 1 - lock
+void set_state_arlarm(int state_val);
+int get_state_arlarm();
+
+// Compare name to url (only 1 url is accepted)
+int compare_name_to_url(unsigned char *name, char *url, int len);
 
 // Check is IP exist in white list; return 1 - exist, 0 not exist
 int is_exist(struct white_list_t *wlist, char *ip);

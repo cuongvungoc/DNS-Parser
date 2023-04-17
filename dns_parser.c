@@ -1,5 +1,21 @@
 #include "dns_parser.h"
 
+void set_state_arlarm(int state_val)
+{
+    pthread_mutex_lock(&mutex);
+    state_arlarm = state_val;
+    pthread_mutex_unlock(&mutex);
+}
+
+int get_state_arlarm()
+{
+    int value;
+    pthread_mutex_lock(&mutex);
+    value = state_arlarm;
+    pthread_mutex_unlock(&mutex);
+    return value;
+}
+
 int is_exist(struct white_list_t *wlist, char *ip)
 {
     if (0 == wlist->len)
@@ -41,6 +57,23 @@ void change_to_dns_name_format(char *dns, char *host)
     strcpy(dns, temp2);
 }
 
+int compare_name_to_url(unsigned char *name, char *url, int len)
+{
+    char name_cmp[len];
+    char url_cmp[len];
+    strcpy(name_cmp, (char *)name);
+    // Example: 6google3com, convert int to char
+    for (int i = 0; i < len; i++)
+    {
+        if (name_cmp[i] < 10 && name_cmp[i] != '\0')
+        {
+            name_cmp[i] += ZERO_CHAR;
+        }
+    }
+    change_to_dns_name_format(url_cmp, url);
+    return memcmp(name_cmp, url_cmp, len);
+}
+
 // Function for multithreading dns parser
 void *dns_parser()
 {
@@ -77,8 +110,24 @@ void *dns_parser()
     wlist->len = 0;
     char cmd[CMD_SIZE] = "iptables -I white-list 1 -d ";
 
+    eth_header *eth_hdr;
+    ip_header *ip_hdr;
+    udp_header *udp_hdr;
+    dns_header *dns_hdr;
+    dns_question *dns_quest;
+    unsigned char *payload;
+
+    unsigned char *name;
+    unsigned char *qname;
+    int qname_len;
+
     while (1)
     {
+        if (UNLOCK_STATE == get_state_arlarm())
+        {
+            break;
+        }
+
         // Set buffer for reading dns response message
         memset(buffer, 0, sizeof(buffer));
         int len = recv(sockfd, buffer, sizeof(buffer), 0);
@@ -87,51 +136,35 @@ void *dns_parser()
             perror("recv");
             exit(1);
         }
- 
-        ip_header *ip_hdr = (ip_header *)&buffer[sizeof(eth_header)];
+        eth_hdr = (eth_header *)&buffer;
+        ip_hdr = (ip_header *)&buffer[sizeof(eth_header)];
 
         // Check IP Protocol : 17 - UDP
-        if (ip_hdr->ip_proto == 17)
+        if (ip_hdr->ip_proto == UDP_PROTO)
         {
             // Read UDP header
-            udp_header *udp_hdr = (udp_header *)&buffer[sizeof(ip_header) + sizeof(eth_header)];
+            udp_hdr = (udp_header *)&buffer[sizeof(ip_header) + sizeof(eth_header)];
 
             // Check UDP source port: 53 - DNS
-            if (ntohs(udp_hdr->src_port) == 53)
+            if (ntohs(udp_hdr->src_port) == DNS_PORT)
             {
                 // Read DNS header
-                dns_header *dns_hdr = (dns_header *)&buffer[sizeof(ip_header) + sizeof(eth_header) + sizeof(udp_header)];
+                dns_hdr = (dns_header *)&buffer[sizeof(ip_header) + sizeof(eth_header) + sizeof(udp_header)];
 
                 // Read name (URL)
-                unsigned char *qname = (unsigned char *)&buffer[sizeof(ip_header) + sizeof(eth_header) + sizeof(udp_header) + sizeof(dns_header)];
+                qname = (unsigned char *)&buffer[sizeof(ip_header) + sizeof(eth_header) + sizeof(udp_header) + sizeof(dns_header)];
 
                 // Find name length
-                int qname_len = find_qname_len(qname);
+                qname_len = find_qname_len(qname);
 
-                unsigned char *name = (unsigned char *)malloc(qname_len * sizeof(unsigned char));
+                name = (unsigned char *)malloc(qname_len * sizeof(unsigned char));
                 memcpy(name, qname, qname_len);
 
-                /* Check name */
-                char name_cmp[qname_len];
-                char url_cmp[qname_len];
-                // Name for compare with url
-                strcpy(name_cmp, (char *)name);
-                for (int i = 0; i < qname_len; i++)
-                {
-                    if (name_cmp[i] < 10 && name_cmp[i] != '\0')
-                    {
-                        name_cmp[i] += 48;
-                    }
-                }
-
-                change_to_dns_name_format(url_cmp, URL);
-                /* Check name */
-
                 // If name equal to url -> get IP from dns answer
-                if (0 == memcmp(name_cmp, url_cmp, qname_len))
+                if (0 == compare_name_to_url(name, URL, qname_len))
                 {
-                    dns_question *dns_quest = (dns_question *)&qname[qname_len];
-                    unsigned char *payload = (unsigned char *)&qname[qname_len + sizeof(dns_question)];
+                    dns_quest = (dns_question *)&qname[qname_len];
+                    payload = (unsigned char *)&qname[qname_len + sizeof(dns_question)];
 
                     // Read Answer
                     int payload_ptr = 0;
@@ -139,7 +172,7 @@ void *dns_parser()
                     {
                         answer[i].name = (unsigned char *)malloc(qname_len * sizeof(unsigned char));
                         memcpy(answer[i].name, qname, qname_len);
-                        payload_ptr += sizeof(uint16_t);
+                        payload_ptr += sizeof(uint16_t); // DNS name pointer C00C
                         answer[i].resource = (struct dns_resource_record_t *)&payload[payload_ptr];
                         payload_ptr += sizeof(struct dns_resource_record_t);
 
@@ -175,6 +208,14 @@ void *dns_parser()
             }
         }
     }
+    free(name);
+    free(wlist);
+    for (int i = 0; i < ntohs(dns_hdr->ancount); i++)
+    {
+        free(answer[i].rdata);
+        free(answer[i].name);
+    }
+    pthread_exit(NULL);
 }
 
 // Find domain name length in query section

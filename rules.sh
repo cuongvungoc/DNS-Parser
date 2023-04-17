@@ -3,8 +3,8 @@
 define_chain ()
 {
     # Flush rules and delete custom chains
-    iptables -F
-    iptables -X
+    # iptables -F
+    # iptables -X
     # Define custom chain and add to OUTPUT chain
     iptables -N white-list
     iptables -N chain-lock
@@ -14,7 +14,7 @@ define_chain ()
 
 if [ $1 = "lock" ];
 then
-    echo "LOCK MODE"
+    echo "LOCK MODE ..."
     define_chain
 
     # Define white-list-chain
@@ -29,9 +29,15 @@ then
 
 elif [ $1 = "unlock" ];
 then
-    echo "UNLOCK MODE"
-    define_chain
-else
-    echo "Invalid input"
+    echo "UNLOCK MODE ..."
+    # define_chain
+    iptables -D OUTPUT -j chain-lock
+    iptables -D chain-lock -j white-list
+    iptables -F white-list
+    iptables -F chain-lock
+    iptables -X white-list
+    iptables -X chain-lock
+# else
+#     echo "Invalid input"
 fi
 

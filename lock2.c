@@ -1,8 +1,8 @@
 #include "dns_parser.h"
 
-// state_arlarm, 1 - state changed, 0 - not changed
-// int state_arlarm = 0;
-// pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // mutex init
+// state_arlarm, 0 - unlock, 1 - lock
+int state_arlarm = 0;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER; // mutex init
 
 int main(int argc, char *argv[])
 {
@@ -14,19 +14,25 @@ int main(int argc, char *argv[])
     char cmd[CMD_SIZE] = "sh rules.sh ";
     char option[OPTION_SIZE];
     strcat(nslookup, URL);
+    strcat(nslookup, NULL_SAVE);
     while (1)
     {
+        if (UNLOCK_STATE == get_state_arlarm())
+        {
+            printf("Enter lock to lock: ");
+        }
+        else
+        {
+            printf("Enter unlock to unlock: ");
+        }
 
-        // Enter optiion for run rules.sh
-        printf("Enter your option, lock or unlock ?: ");
         scanf("%s", option);
         strcat(cmd, option);
 
-        system(cmd);
-        strcpy(cmd, "sh rules.sh ");
-
-        if (0 == strcmp(option, LOCK))
+        if (0 == strcmp(option, LOCK) && UNLOCK_STATE == get_state_arlarm())
         {
+            set_state_arlarm(LOCK_STATE);
+            system(cmd);
             dns_parser_thread = pthread_create(&thread_ID, NULL, dns_parser, NULL);
             if (dns_parser_thread)
             {
@@ -36,15 +42,21 @@ int main(int argc, char *argv[])
             usleep(1000);
             // nslookup for get default IP
             system(nslookup);
-                }
-        else if (0 == strcmp(option, UNLOCK))
+        }
+        else if (0 == strcmp(option, UNLOCK) && LOCK_STATE == get_state_arlarm())
         {
-            pthread_cancel(thread_ID);
+            set_state_arlarm(UNLOCK_STATE);
+            system(cmd);
+            // pthread_cancel(thread_ID);
+            pthread_join(thread_ID, NULL);
             usleep(1000);
         }
+        else
+        {
+            printf("Invailid option!\n");
+        }
 
-        // state_arlarm = 1;
-        // set_state_arlarm(1);
+        strcpy(cmd, "sh rules.sh ");
     }
 
     pthread_exit(NULL);
