@@ -4,6 +4,7 @@
         "udp.h": "c",
         "ip.h": "c",
         "stdio.h": "c",
-        "pthread.h": "c"
+        "pthread.h": "c",
+        "netdb.h": "c"
     }
 }

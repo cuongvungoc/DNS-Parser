@@ -9,11 +9,7 @@ void set_state_arlarm(int state_val)
 
 int get_state_arlarm()
 {
-    int value;
-    pthread_mutex_lock(&mutex);
-    value = state_arlarm;
-    pthread_mutex_unlock(&mutex);
-    return value;
+    return state_arlarm;
 }
 
 int is_exist(struct white_list_t *wlist, char *ip)
@@ -77,6 +73,7 @@ int compare_name_to_url(unsigned char *name, char *url, int len)
 // Function for multithreading dns parser
 void *dns_parser()
 {
+    nslookup_trigger = 1;
     // Open a raw socket, receive
     int sockfd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sockfd < 0)
@@ -136,6 +133,7 @@ void *dns_parser()
             perror("recv");
             exit(1);
         }
+
         eth_hdr = (eth_header *)&buffer;
         ip_hdr = (ip_header *)&buffer[sizeof(eth_header)];
 
@@ -202,19 +200,21 @@ void *dns_parser()
                                 system(cmd);
                                 strcpy(cmd, "iptables -I white-list 1 -d ");
                             }
+
+                            for (int i = 0; i < ntohs(dns_hdr->ancount); i++)
+                            {
+                                free(answer[i].rdata);
+                                free(answer[i].name);
+                            }
                         }
                     }
                 }
+                free(name);
             }
         }
     }
-    free(name);
     free(wlist);
-    for (int i = 0; i < ntohs(dns_hdr->ancount); i++)
-    {
-        free(answer[i].rdata);
-        free(answer[i].name);
-    }
+    nslookup_trigger = 0;
     pthread_exit(NULL);
 }
 

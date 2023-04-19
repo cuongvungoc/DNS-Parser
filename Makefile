@@ -1,6 +1,6 @@
 CC:= gcc
 CFLAGS:= -Wall
-DEPS:= dns_parser.h
+# DEPS:= dns_parser.h
 OBJECT:= lock2.o dns_parser.o
 TARGET:= lock2
 

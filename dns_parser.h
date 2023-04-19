@@ -13,6 +13,7 @@
 #include <net/if.h>
 #include <linux/if_packet.h>
 #include <pthread.h>
+#include <netdb.h>
 
 #define BUF_SIZE 65536
 #define RECORD_NUM 32
@@ -34,7 +35,9 @@
 #define NULL_SAVE " > /dev/null 2>&1"
 
 extern int state_arlarm;
+extern int nslookup_trigger;
 extern pthread_mutex_t mutex;
+extern pthread_cond_t cond;
 
 struct white_list_t
 {
